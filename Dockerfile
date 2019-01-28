@@ -4,5 +4,5 @@ copy . $DEPLOY
 run apk update && \
     apk add --virtual=deps git && \
     pip install git+https://github.com/Rapptz/discord.py.git@rewrite
-cmd python3 discordbot.py
+cmd python3 -u discordbot.py
 
