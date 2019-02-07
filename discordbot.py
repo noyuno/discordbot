@@ -7,6 +7,10 @@ import queue
 import socket
 import sys
 import threading
+import time
+from datetime import datetime
+import schedule
+from selenium import webdriver
 
 sendqueue = queue.Queue()
 
@@ -23,14 +27,14 @@ class APIHandler(BaseHTTPRequestHandler):
         res = { 'status': 0, 'type': 'none', 'message': 'none' }
         got = { }
         try:
-            s = self.rfile.read(int(self.headers.get('content-length'))).decode("utf-8")
+            s = self.rfile.read(int(self.headers.get('content-length'))).decode('utf-8')
             got = json.loads(s)
             sendqueue.put(got)
             res = { 'status': 200 }
         except Exception as e:
             err = e.with_traceback(sys.exc_info()[2])
             res = { 'status': 500, 'type': err.__class__.__name__, 'message': str(err) }
-            print("error: {0}({1}), got: {2}".format(err.__class__.__name__, str(err), got))
+            print('error: {0}({1}), got: {2}'.format(err.__class__.__name__, str(err), got))
         self.send_response(res['status'])
         self.send_header('content-type', 'application/json')
         self.end_headers()
@@ -39,8 +43,36 @@ class APIHandler(BaseHTTPRequestHandler):
 def httpserver(loop):
     asyncio.set_event_loop(loop)
     print('launch http server')
-    server = HTTPServer(("discordbot", 80), APIHandler)
+    server = HTTPServer(('discordbot', 80), APIHandler)
     server.serve_forever()
+
+def weather():
+    try:
+        url = 'http://www.river.go.jp/x/krd0107010.php?lon=139.2859113365232&lat=38.6116748134277&opa=0.4&zoom=8&leg=0&ext=0'
+        driver = webdriver.Chrome()
+        driver.get(url)
+        driver.set_window_size(1500, 1500)
+        time.sleep(2)
+        driver.save_screenshot('screenshot.png')
+        driver.quit()
+        sendqueue.put({'filename': 'screenshot.png',
+                    'url': url})
+    except Exception as e:
+        err = e.with_traceback(sys.exc_info()[2])
+        err = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
+        sendqueue.put({'message': err})
+
+def scheduler(loop):
+    asyncio.set_event_loop(loop)
+    print('launch scheduler')
+    schedule.every().day.at('22:30').do( # 07:30
+        (lambda: sendqueue.put({ 'message': datetime.now().strftime('おはようございます') })))
+    schedule.every().day.at('09:20').do( # 18:20
+        (lambda: sendqueue.put({ 'message': datetime.now().strftime('夕ごはんの時間です') })))
+
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
 
 class DiscordClient(discord.Client):
     def __init__(self, channelname, sendqueue, *args, **kwargs):
@@ -53,7 +85,7 @@ class DiscordClient(discord.Client):
     async def on_ready(self):
         print('logged in as {0.user}'.format(self))
         self.channel = [channel for channel in self.get_all_channels() if channel.name == self.channelname][0]
-        await self.channel.send('hello this is discordbot')
+        await self.channel.send('hello this is k2/discordbot')
 
     async def on_message(self, message):
         if message.author == self.user:
@@ -61,6 +93,9 @@ class DiscordClient(discord.Client):
         if message.content.startswith('hi'):
             print('hi')
             await message.channel.send('hi')
+        if "天気" in message.content:
+            print('weather')
+            await weather()
 
     async def send_task(self):
         await self.wait_until_ready()
@@ -95,16 +130,18 @@ class DiscordClient(discord.Client):
                 if q.get('video') is not None:
                     e.set_image(url=q.get('video'))
                     anyembed = True
+                if q.get('filename') is not None:
+                    await self.channel.send_file(q.get('filename'))
                 if anyembed:
                     await self.channel.send(q.get('message'), embed=e)
                 else:
                     await self.channel.send(q.get('message'))
 
-                print("sent message {0} to channel {1}".format(q, self.channel.name))
+                print('sent message {0} to channel {1}'.format(q, self.channel.name))
                 self.sendqueue.task_done()
             except Exception as e:
                 err = e.with_traceback(sys.exc_info()[2])
-                print("error: {0}({1})".format(err.__class__.__name__, str(err)))
+                print('error: {0}({1})'.format(err.__class__.__name__, str(err)))
 
 def main():
     global sendqueue
@@ -118,8 +155,11 @@ def main():
 
     print('listen at {0}'.format(socket.gethostbyname_ex(socket.gethostname())))
 
-    loop = asyncio.new_event_loop()
-    threading.Thread(target=httpserver, args=(loop,)).start()
+    httploop = asyncio.new_event_loop()
+    threading.Thread(target=httpserver, args=(httploop,)).start()
+
+    scheduleloop = asyncio.new_event_loop()
+    threading.Thread(target=scheduler, args=(scheduleloop,)).start()
 
     print('launch discord client')
     client = DiscordClient(os.environ.get('DISCORD_CHANNEL_NAME'), sendqueue)
