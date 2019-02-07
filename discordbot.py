@@ -1,11 +1,12 @@
-import os
-import sys
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import asyncio
 import discord
 import json
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import threading
-import asyncio
+import os
 import queue
+import socket
+import sys
+import threading
 
 sendqueue = queue.Queue()
 
@@ -115,12 +116,13 @@ def main():
         print('DISCORD_CHANNEL_ID is not set', file=sys.stderr)
         sys.exit(1)
 
+    print('listen at {0}'.format(socket.gethostbyname_ex(socket.gethostname())))
+
     loop = asyncio.new_event_loop()
     threading.Thread(target=httpserver, args=(loop,)).start()
 
     print('launch discord client')
     client = DiscordClient(os.environ.get('DISCORD_CHANNEL_NAME'), sendqueue)
-    print('trying login...')
     client.run(os.environ.get('DISCORD_TOKEN'))
 
 if __name__ == '__main__':
