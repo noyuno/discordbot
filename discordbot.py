@@ -10,7 +10,6 @@ import threading
 import time
 from datetime import datetime
 import schedule
-from selenium import webdriver
 
 sendqueue = queue.Queue()
 
@@ -46,21 +45,21 @@ def httpserver(loop):
     server = HTTPServer(('discordbot', 80), APIHandler)
     server.serve_forever()
 
-def weather():
-    try:
-        url = 'http://www.river.go.jp/x/krd0107010.php?lon=139.2859113365232&lat=38.6116748134277&opa=0.4&zoom=8&leg=0&ext=0'
-        driver = webdriver.Chrome()
-        driver.get(url)
-        driver.set_window_size(1500, 1500)
-        time.sleep(2)
-        driver.save_screenshot('screenshot.png')
-        driver.quit()
-        sendqueue.put({'filename': 'screenshot.png',
-                    'url': url})
-    except Exception as e:
-        err = e.with_traceback(sys.exc_info()[2])
-        err = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
-        sendqueue.put({'message': err})
+#async def weather():
+#    try:
+#        url = 'http://www.river.go.jp/x/krd0107010.php?lon=139.2859113365232&lat=38.6116748134277&opa=0.4&zoom=8&leg=0&ext=0'
+#        driver = webdriver.Chrome()
+#        driver.get(url)
+#        driver.set_window_size(1500, 1500)
+#        time.sleep(2)
+#        driver.save_screenshot('screenshot.png')
+#        driver.quit()
+#        sendqueue.put({'filename': 'screenshot.png',
+#                    'url': url})
+#    except Exception as e:
+#        err = e.with_traceback(sys.exc_info()[2])
+#        err = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
+#        sendqueue.put({'message': err})
 
 def scheduler(loop):
     asyncio.set_event_loop(loop)
@@ -88,14 +87,20 @@ class DiscordClient(discord.Client):
         await self.channel.send('hello this is k2/discordbot')
 
     async def on_message(self, message):
-        if message.author == self.user:
-            return
-        if message.content.startswith('hi'):
-            print('hi')
-            await message.channel.send('hi')
-        if "天気" in message.content:
-            print('weather')
-            await weather()
+        try:
+            if message.author == self.user:
+                return
+            if message.content.startswith('hi'):
+                await message.channel.send('hi')
+            if "天気" in message.content:
+                await message.channel.send('not implemented yet')
+                #await weather()
+        except Exception as e:
+            err = e.with_traceback(sys.exc_info()[2])
+            err = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
+            print(err)
+            sendqueue.put({'message': err})
+
 
     async def send_task(self):
         await self.wait_until_ready()
@@ -106,39 +111,40 @@ class DiscordClient(discord.Client):
         # this loop must catch exception
         while not self.is_closed():
             try:
-                q = self.sendqueue.get()
-                e = discord.Embed()
-                anyembed = False
-                if q.get('title') is not None:
-                    e.title = q.get('title')
-                    anyembed = True
-                if q.get('description') is not None:
-                    e.description = q.get('description')
-                    anyembed = True
-                if q.get('url') is not None:
-                    e.url = q.get('url')
-                    anyembed = True
-                if q.get('color') is not None:
-                    e.color = q.get('color')
-                    anyembed = True
-                if q.get('image') is not None:
-                    e.set_image(url=q.get('image'))
-                    anyembed = True
-                if q.get('thumbnail') is not None:
-                    e.set_image(url=q.get('thumbnail'))
-                    anyembed = True
-                if q.get('video') is not None:
-                    e.set_image(url=q.get('video'))
-                    anyembed = True
-                if q.get('filename') is not None:
-                    await self.channel.send_file(q.get('filename'))
-                if anyembed:
-                    await self.channel.send(q.get('message'), embed=e)
-                else:
-                    await self.channel.send(q.get('message'))
+                await asyncio.sleep(1)
+                if not self.sendqueue.empty():
+                    q = self.sendqueue.get()
+                    e = discord.Embed()
+                    anyembed = False
+                    if q.get('title') is not None:
+                        e.title = q.get('title')
+                        anyembed = True
+                    if q.get('description') is not None:
+                        e.description = q.get('description')
+                        anyembed = True
+                    if q.get('url') is not None:
+                        e.url = q.get('url')
+                        anyembed = True
+                    if q.get('color') is not None:
+                        e.color = q.get('color')
+                        anyembed = True
+                    if q.get('image') is not None:
+                        e.set_image(url=q.get('image'))
+                        anyembed = True
+                    if q.get('thumbnail') is not None:
+                        e.set_image(url=q.get('thumbnail'))
+                        anyembed = True
+                    if q.get('video') is not None:
+                        e.set_image(url=q.get('video'))
+                        anyembed = True
+                    if q.get('filename') is not None:
+                        await self.channel.send_file(q.get('filename'))
+                    if anyembed:
+                        await self.channel.send(q.get('message'), embed=e)
+                    else:
+                        await self.channel.send(q.get('message'))
 
-                print('sent message {0} to channel {1}'.format(q, self.channel.name))
-                self.sendqueue.task_done()
+                    print('sent message {0} to channel {1}'.format(q, self.channel.name))
             except Exception as e:
                 err = e.with_traceback(sys.exc_info()[2])
                 print('error: {0}({1})'.format(err.__class__.__name__, str(err)))
@@ -162,6 +168,17 @@ def main():
     threading.Thread(target=scheduler, args=(scheduleloop,)).start()
 
     print('launch discord client')
+    #client = discord.Client()
+    #@client.event
+    #async def on_ready():
+    #    print('We have logged in as {0.user}'.format(client))
+    #@client.event
+    #async def on_message(message):
+    #    if message.author == client.user:
+    #        return
+
+    #    if message.content.startswith('hi'):
+    #        await message.channel.send('Hello!')
     client = DiscordClient(os.environ.get('DISCORD_CHANNEL_NAME'), sendqueue)
     client.run(os.environ.get('DISCORD_TOKEN'))
 
