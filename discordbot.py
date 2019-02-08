@@ -45,22 +45,6 @@ def httpserver(loop):
     server = HTTPServer(('discordbot', 80), APIHandler)
     server.serve_forever()
 
-#async def weather():
-#    try:
-#        url = 'http://www.river.go.jp/x/krd0107010.php?lon=139.2859113365232&lat=38.6116748134277&opa=0.4&zoom=8&leg=0&ext=0'
-#        driver = webdriver.Chrome()
-#        driver.get(url)
-#        driver.set_window_size(1500, 1500)
-#        time.sleep(2)
-#        driver.save_screenshot('screenshot.png')
-#        driver.quit()
-#        sendqueue.put({'filename': 'screenshot.png',
-#                    'url': url})
-#    except Exception as e:
-#        err = e.with_traceback(sys.exc_info()[2])
-#        err = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
-#        sendqueue.put({'message': err})
-
 def scheduler(loop):
     asyncio.set_event_loop(loop)
     print('launch scheduler')
