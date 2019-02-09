@@ -8,8 +8,9 @@ import socket
 import sys
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import schedule
+import requests
 
 sendqueue = queue.Queue()
 
@@ -45,17 +46,73 @@ def httpserver(loop):
     server = HTTPServer(('discordbot', 80), APIHandler)
     server.serve_forever()
 
+def good_morning():
+    sendqueue.put({ 'message': 'おはようございます'})
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(weather())
+
 def scheduler(loop):
     asyncio.set_event_loop(loop)
     print('launch scheduler')
-    schedule.every().day.at('22:30').do( # 07:30
-        (lambda: sendqueue.put({ 'message': datetime.now().strftime('おはようございます') })))
+    schedule.every().day.at('22:30').do(good_morning) # 07:30
     schedule.every().day.at('09:20').do( # 18:20
-        (lambda: sendqueue.put({ 'message': datetime.now().strftime('夕ごはんの時間です') })))
+        (lambda: sendqueue.put({ 'message': '夕ごはんの時間です' })))
 
     while True:
         schedule.run_pending()
         time.sleep(1)
+
+def unixtimestr(ut):
+    return datetime.fromtimestamp(
+        ut, timezone(timedelta(hours=+9), 'JST')).strftime('%m/%d %H:%M')
+
+def unixtimestrt(ut):
+    return datetime.fromtimestamp(
+        ut, timezone(timedelta(hours=+9), 'JST')).strftime('%H:%M')
+
+async def weather(loc = None):
+    global sendqueue
+    if loc is None:
+        loc = os.environ.get('LOCATION')
+    if loc == "":
+        loc = 'Tokyo'
+    r = requests.get('https://maps.googleapis.com/maps/api/geocode/json?address=' + loc + '&key=' +
+                     os.environ.get('GOOGLE_MAPS_API_KEY')).json()
+    if r['status'] != "OK" or len(r['results']) == 0:
+        # error
+        sendqueue.put({'message': r['status']})
+        return
+
+    lat = r['results'][0]['geometry']['location']['lat']
+    lng = r['results'][0]['geometry']['location']['lng']
+    # debug
+    #sendqueue.put({'message': 'lat: {0}, lng: {1}'.format(lat, lng)})
+
+    r = requests.get('https://api.darksky.net/forecast/' + os.environ.get('DARK_SKY_API_KEY') +
+                     '/' + str(lat) + ',' + str(lng) + '?lang=ja&units=si').json()
+    hourly = ''
+    count = 0
+    for item in r['hourly']['data']:
+        if count >= 10:
+            break
+        count += 1
+        hourly += '{0}: {1}, {2}度, {3}%\n'.format(
+            unixtimestrt(item['time']),
+            item['summary'],
+            int(item['temperature']),
+            int(item['precipProbability'] * 100))
+    sendqueue.put({'message': '''{0}時点の{1}の天気: {2}, {3}度, 湿度{4}%, 風速{5}m/s
+予報: {6}
+{7}'''.format(
+        unixtimestr(r['currently']['time']),
+        loc,
+        r['currently']['summary'],
+        int(r['currently']['temperature']),
+        int(r['currently']['humidity']*100),
+        int(r['currently']['windSpeed']),
+        r['hourly']['summary'],
+        hourly
+    )})
 
 class DiscordClient(discord.Client):
     def __init__(self, channelname, sendqueue, *args, **kwargs):
@@ -77,8 +134,11 @@ class DiscordClient(discord.Client):
             if message.content.startswith('hi'):
                 await message.channel.send('hi')
             if "天気" in message.content:
-                await message.channel.send('not implemented yet')
-                #await weather()
+                a = message.content.split(' ')
+                if len(a) == 1:
+                    await weather()
+                else:
+                    await weather(' '.join(a[1:]))
         except Exception as e:
             err = e.with_traceback(sys.exc_info()[2])
             err = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
@@ -137,11 +197,19 @@ def main():
     global sendqueue
 
     if os.environ.get('DISCORD_TOKEN') is None:
-        print('DISCORD_TOKEN is not set', file=sys.stderr)
+        print('error: DISCORD_TOKEN is not set', file=sys.stderr)
         sys.exit(1)
     if os.environ.get('DISCORD_CHANNEL_NAME') is None:
-        print('DISCORD_CHANNEL_ID is not set', file=sys.stderr)
+        print('error: DISCORD_CHANNEL_ID is not set', file=sys.stderr)
         sys.exit(1)
+    if os.environ.get('GOOGLE_MAPS_API_KEY') is None:
+        print('error: GOOGLE_MAPS_API_KEY is not set', file=sys.stderr)
+        sys.exit(1)
+    if os.environ.get('DARK_SKY_API_KEY') is None:
+        print('error: DARK_SKY_API_KEY is not set', file=sys.stderr)
+        sys.exit(1)
+    if os.environ.get('LOCATION') is None:
+        print('warning: LOCATION is not set', file=sys.stderr)
 
     print('listen at {0}'.format(socket.gethostbyname_ex(socket.gethostname())))
 
@@ -152,17 +220,6 @@ def main():
     threading.Thread(target=scheduler, args=(scheduleloop,)).start()
 
     print('launch discord client')
-    #client = discord.Client()
-    #@client.event
-    #async def on_ready():
-    #    print('We have logged in as {0.user}'.format(client))
-    #@client.event
-    #async def on_message(message):
-    #    if message.author == client.user:
-    #        return
-
-    #    if message.content.startswith('hi'):
-    #        await message.channel.send('Hello!')
     client = DiscordClient(os.environ.get('DISCORD_CHANNEL_NAME'), sendqueue)
     client.run(os.environ.get('DISCORD_TOKEN'))
 
