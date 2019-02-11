@@ -51,12 +51,40 @@ def good_morning():
     loop = asyncio.get_event_loop()
     loop.run_until_complete(weather())
 
+def scheduled_monitoring():
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(monitoring(False))
+
+async def monitoring(show_all):
+    watch_container = {}
+    for c in os.environ.get('CONTAINERS').split(','):
+        watch_container[c] = False
+    r = requests.get('http://{0}/api/v1.3/containers/docker'.format(os.environ.get('CADVISOR'))).json()
+    #debug
+    #print(r['name'])
+    for container in r['subcontainers']:
+        c = requests.get('http://{0}/api/v1.3/containers{1}'.format(
+            os.environ.get('CADVISOR'), container['name'])).json()
+        watch_container[c['spec']['labels']['com.docker.compose.service']] = True
+    if show_all:
+        text = ''
+        for k, v in watch_container.items():
+            text += '{0}: {1}\n'.format(k, v)
+        sendqueue.put({ 'message': '{0}'.format(text) })
+    else:
+        text = ''
+        for k, v in watch_container.items():
+            if v == False:
+                text += '{0} '.format(k)
+        sendqueue.put({ 'message': '{0} が停止しています'.format(text) })
+
 def scheduler(loop):
     asyncio.set_event_loop(loop)
     print('launch scheduler')
     schedule.every().day.at('22:30').do(good_morning) # 07:30
     schedule.every().day.at('09:20').do( # 18:20
         (lambda: sendqueue.put({ 'message': '夕ごはんの時間です' })))
+    schedule.every().hour.do(scheduled_monitoring)
 
     while True:
         schedule.run_pending()
@@ -133,12 +161,16 @@ class DiscordClient(discord.Client):
                 return
             if message.content.startswith('hi'):
                 await message.channel.send('hi')
-            if "天気" in message.content:
+            if 'help' in message.content:
+                await message.channel.send('available commands: hi, 天気|weather, ps')
+            if "天気" in message.content or 'weather' in message.content:
                 a = message.content.split(' ')
                 if len(a) == 1:
                     await weather()
                 else:
                     await weather(' '.join(a[1:]))
+            if 'ps' in message.content:
+                await monitoring(True)
         except Exception as e:
             err = e.with_traceback(sys.exc_info()[2])
             err = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
@@ -193,23 +225,27 @@ class DiscordClient(discord.Client):
                 err = e.with_traceback(sys.exc_info()[2])
                 print('error: {0}({1})'.format(err.__class__.__name__, str(err)))
 
+def check_environ(keys, header):
+    ret = False
+    for k in keys:
+        if os.environ.get(k) is None:
+            ret = True
+            print('{0}: {1} is not set'.format(header, k), file=sys.stderr)
+    return ret
+
 def main():
     global sendqueue
 
-    if os.environ.get('DISCORD_TOKEN') is None:
-        print('error: DISCORD_TOKEN is not set', file=sys.stderr)
+    envse = ['DISCORD_TOKEN', 'DISCORD_CHANNEL_NAME', 'GOOGLE_MAPS_API_KEY',
+            'DARK_SKY_API_KEY', 'CADVISOR', 'CONTAINERS']
+    envsc = ['LOCATION']
+
+
+    f = check_environ(envse, 'error')
+    check_environ(envsc, 'warning')
+    if f:
+        print('error: some environment variables are not set. exiting.', file=sys.stderr)
         sys.exit(1)
-    if os.environ.get('DISCORD_CHANNEL_NAME') is None:
-        print('error: DISCORD_CHANNEL_ID is not set', file=sys.stderr)
-        sys.exit(1)
-    if os.environ.get('GOOGLE_MAPS_API_KEY') is None:
-        print('error: GOOGLE_MAPS_API_KEY is not set', file=sys.stderr)
-        sys.exit(1)
-    if os.environ.get('DARK_SKY_API_KEY') is None:
-        print('error: DARK_SKY_API_KEY is not set', file=sys.stderr)
-        sys.exit(1)
-    if os.environ.get('LOCATION') is None:
-        print('warning: LOCATION is not set', file=sys.stderr)
 
     print('listen at {0}'.format(socket.gethostbyname_ex(socket.gethostname())))
 
