@@ -55,10 +55,14 @@ def scheduled_monitoring():
     loop = asyncio.get_event_loop()
     loop.run_until_complete(monitoring(False))
 
+running_last_period = {}
+
 async def monitoring(show_all):
     watch_container = {}
     for c in os.environ.get('CONTAINERS').split(','):
         watch_container[c] = False
+        if running_last_period.get(c) is None:
+            running_last_period[c] = True
     r = requests.get('http://{0}/api/v1.3/containers/docker'.format(os.environ.get('CADVISOR'))).json()
     #debug
     #print(r['name'])
@@ -73,10 +77,13 @@ async def monitoring(show_all):
         sendqueue.put({ 'message': '{0}'.format(text) })
     else:
         text = ''
+        count = 0
         for k, v in watch_container.items():
-            if v == False:
+            if v == False and running_last_period.get(k) == True:
                 text += '{0} '.format(k)
-        sendqueue.put({ 'message': '{0} が停止しています'.format(text) })
+                count += 1
+        if count > 0:
+            sendqueue.put({ 'message': '{0} が停止しています'.format(text) })
 
 def scheduler(loop):
     asyncio.set_event_loop(loop)
@@ -170,7 +177,7 @@ class DiscordClient(discord.Client):
                 else:
                     await weather(' '.join(a[1:]))
             if 'ps' in message.content:
-                await monitoring(True)
+                await monitoring(False)
         except Exception as e:
             err = e.with_traceback(sys.exc_info()[2])
             err = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
