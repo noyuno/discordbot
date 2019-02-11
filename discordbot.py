@@ -177,7 +177,7 @@ class DiscordClient(discord.Client):
                 else:
                     await weather(' '.join(a[1:]))
             if 'ps' in message.content:
-                await monitoring(False)
+                await monitoring(True)
         except Exception as e:
             err = e.with_traceback(sys.exc_info()[2])
             err = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
