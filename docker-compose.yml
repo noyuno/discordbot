@@ -1,0 +1,33 @@
+version: "3"
+services:
+    discordbot:
+        image: noyuno/discordbot:latest
+        restart: always
+        expose:
+            - "80"
+        links:
+            - cadvisor
+        volumes:
+            - ./data/discordbot:/data/discordbot/out
+            - ./discordbot:/opt
+        environment:
+            DEPLOY: /data/discordbot
+            DISCORD_TOKEN: ${DISCORD_TOKEN}
+            DISCORD_CHANNEL_NAME: ${DISCORD_CHANNEL_NAME}
+            GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}
+            DARK_SKY_API_KEY: ${DARK_SKY_API_KEY}
+            LOCATION: ${LOCATION}
+            CADVISOR: 'cadvisor:8080'
+            CONTAINERS: 'nginx,php7,gitbucket,gitbucket-db,gitbucket-db-backup,minio,wekan,wekan-db,backupd,animed,prometheus,node-exporter,grafana'
+
+    cadvisor:
+        image: google/cadvisor:latest
+        restart: always
+        volumes:
+            - /:/rootfs:ro
+            - /var/run:/var/run:rw
+            - /sys:/sys:ro
+            - /var/lib/docker/:/var/lib/docker:ro
+        expose:
+            - 8080
+
