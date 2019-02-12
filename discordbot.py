@@ -183,7 +183,7 @@ def xrain():
         sendqueue.put({'message': 'error: One or some environment variables are not set. Must be set {0}'.format(' '.join(env)) })
         return
     # & -> %26
-    url = 'http://{0}/?url=http://www.river.go.jp/x/krd0107010.php?lon={1}%26lat={2}%26opa=0.4%26zoom={3}%26leg=0%26ext=0&delay=2000&width=1000&height=850'.format(
+    url = 'http://{0}/?url=http://www.river.go.jp/x/krd0107010.php?lon={1}%26lat={2}%26opa=0.4%26zoom={3}%26leg=0%26ext=0&width=1000&height=850'.format(
         os.environ.get('MANET'), os.environ.get('XRAIN_LON'),
         os.environ.get('XRAIN_LAT'), os.environ.get('XRAIN_ZOOM'))
     # debug
