@@ -8,7 +8,7 @@ curl -XPOST -d '{"message":"e"}' addr
 
 # Environment variables example
 
-put below variables to .env
+put below variables to `.env`
 
 ~~~
 DISCORD_TOKEN=
