@@ -48,8 +48,9 @@ def httpserver(loop):
 
 def good_morning():
     sendqueue.put({ 'message': 'おはようございます'})
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(weather())
+    #loop = asyncio.get_event_loop()
+    #loop.run_until_complete(weather())
+    weather()
 
 def scheduled_monitoring():
     loop = asyncio.get_event_loop()
@@ -58,12 +59,19 @@ def scheduled_monitoring():
 running_last_period = {}
 
 async def monitoring(show_all):
+    global sendqueue
+    env = ['CADVISOR', 'CONTAINERS']
+    if check_environ(env, 'warning'):
+        sendqueue.put({'message': 'error: One or some environment variables are not set. Must be set {0}'.format(' '.join(env)) })
+        return
+
     watch_container = {}
     for c in os.environ.get('CONTAINERS').split(','):
         watch_container[c] = False
         if running_last_period.get(c) is None:
             running_last_period[c] = True
-    r = requests.get('http://{0}/api/v1.3/containers/docker'.format(os.environ.get('CADVISOR'))).json()
+    url = 'http://{0}/api/v1.3/containers/docker'.format(os.environ.get('CADVISOR'))
+    r = requests.get(url).json()
     #debug
     #print(r['name'])
     for container in r['subcontainers']:
@@ -105,14 +113,30 @@ def unixtimestrt(ut):
     return datetime.fromtimestamp(
         ut, timezone(timedelta(hours=+9), 'JST')).strftime('%H:%M')
 
-async def weather(loc = None):
+def weather(loc = None):
+    tf = threading.Thread(target=forecast, args=(loc,))
+    tx = threading.Thread(target=xrain)
+    tf.start()
+    tx.start()
+    tf.join()
+    tx.join()
+
+def forecast(loc = None):
     global sendqueue
+    env = ['GOOGLE_MAPS_API_KEY', 'DARK_SKY_API_KEY']
+    if check_environ(env, 'warning'):
+        sendqueue.put({'message': 'error: One or some environment variables are not set. Must be set {0}'.format(' '.join(env)) })
+        return
+
     if loc is None:
         loc = os.environ.get('LOCATION')
     if loc == "":
         loc = 'Tokyo'
-    r = requests.get('https://maps.googleapis.com/maps/api/geocode/json?address=' + loc + '&key=' +
-                     os.environ.get('GOOGLE_MAPS_API_KEY')).json()
+    url = 'https://maps.googleapis.com/maps/api/geocode/json?address={0}&key={1}'.format(
+            loc, os.environ.get('GOOGLE_MAPS_API_KEY'))
+    # debug
+    print(url)
+    r = requests.get(url).json()
     if r['status'] != "OK" or len(r['results']) == 0:
         # error
         sendqueue.put({'message': r['status']})
@@ -123,8 +147,11 @@ async def weather(loc = None):
     # debug
     #sendqueue.put({'message': 'lat: {0}, lng: {1}'.format(lat, lng)})
 
-    r = requests.get('https://api.darksky.net/forecast/' + os.environ.get('DARK_SKY_API_KEY') +
-                     '/' + str(lat) + ',' + str(lng) + '?lang=ja&units=si').json()
+    url = 'https://api.darksky.net/forecast/{0}/{1},{2}?lang=ja&units=si'.format(
+        os.environ.get('DARK_SKY_API_KEY'), str(lat), str(lng))
+    #debug
+    print(url)
+    r = requests.get(url).json()
     hourly = ''
     count = 0
     for item in r['hourly']['data']:
@@ -148,6 +175,28 @@ async def weather(loc = None):
         r['hourly']['summary'],
         hourly
     )})
+
+def xrain():
+    global sendqueue
+    env = ['XRAIN_LON', 'XRAIN_LAT', 'XRAIN_ZOOM', 'MANET']
+    if check_environ(env, 'warning'):
+        sendqueue.put({'message': 'error: One or some environment variables are not set. Must be set {0}'.format(' '.join(env)) })
+        return
+    # & -> %26
+    url = 'http://{0}/?url=http://www.river.go.jp/x/krd0107010.php?lon={1}%26lat={2}%26opa=0.4%26zoom={3}%26leg=0%26ext=0&delay=2000&width=1000&height=850'.format(
+        os.environ.get('MANET'), os.environ.get('XRAIN_LON'),
+        os.environ.get('XRAIN_LAT'), os.environ.get('XRAIN_ZOOM'))
+    # debug
+    print(url)
+    r = requests.get(url)
+    if 'image' not in r.headers['content-type']:
+        pass
+        # error
+        sendqueue.put({'message': 'could not get screenshot' })
+        return
+    #with open('/tmp/image.png', 'wb') as f:
+    #    f.write(r.content)
+    sendqueue.put({ 'imagefile': r.content })
 
 class DiscordClient(discord.Client):
     def __init__(self, channelname, sendqueue, *args, **kwargs):
@@ -173,9 +222,9 @@ class DiscordClient(discord.Client):
             if "天気" in message.content or 'weather' in message.content:
                 a = message.content.split(' ')
                 if len(a) == 1:
-                    await weather()
+                    weather()
                 else:
-                    await weather(' '.join(a[1:]))
+                    weather(' '.join(a[1:]))
             if 'ps' in message.content:
                 await monitoring(True)
         except Exception as e:
@@ -199,6 +248,7 @@ class DiscordClient(discord.Client):
                     q = self.sendqueue.get()
                     e = discord.Embed()
                     anyembed = False
+                    fileinstance = None
                     if q.get('title') is not None:
                         e.title = q.get('title')
                         anyembed = True
@@ -220,17 +270,25 @@ class DiscordClient(discord.Client):
                     if q.get('video') is not None:
                         e.set_image(url=q.get('video'))
                         anyembed = True
-                    if q.get('filename') is not None:
-                        await self.channel.send_file(q.get('filename'))
+                    if q.get('imagefile') is not None:
+                        fileinstance = discord.File(q.get('imagefile'), 'image.png')
                     if anyembed:
-                        await self.channel.send(q.get('message'), embed=e)
+                        await self.channel.send(q.get('message'), embed=e, file=fileinstance)
                     else:
-                        await self.channel.send(q.get('message'))
+                        await self.channel.send(q.get('message'), file=fileinstance)
 
-                    print('sent message {0} to channel {1}'.format(q, self.channel.name))
+                    print('sent message data {0} to channel {1}'.format(' '.join(q.keys()), self.channel.name))
             except Exception as e:
                 err = e.with_traceback(sys.exc_info()[2])
-                print('error: {0}({1})'.format(err.__class__.__name__, str(err)))
+                errtext = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
+                print(errtext)
+                try:
+                    await self.channel.send(errtext)
+                except Exception as e:
+                    err = e.with_traceback(sys.exc_info()[2])
+                    errtext = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
+                    print(errtext)
+
 
 def check_environ(keys, header):
     ret = False
@@ -243,9 +301,9 @@ def check_environ(keys, header):
 def main():
     global sendqueue
 
-    envse = ['DISCORD_TOKEN', 'DISCORD_CHANNEL_NAME', 'GOOGLE_MAPS_API_KEY',
-            'DARK_SKY_API_KEY', 'CADVISOR', 'CONTAINERS']
-    envsc = ['LOCATION']
+    envse = ['DISCORD_TOKEN', 'DISCORD_CHANNEL_NAME']
+    envsc = ['LOCATION', 'XRAIN_LON', 'XRAIN_LAT', 'XRAIN_ZOOM', 'MANET',
+             'GOOGLE_MAPS_API_KEY', 'DARK_SKY_API_KEY', 'CADVISOR', 'CONTAINERS']
 
 
     f = check_environ(envse, 'error')
