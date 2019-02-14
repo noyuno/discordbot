@@ -1,18 +1,24 @@
+from datetime import datetime, timezone, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import asyncio
 import discord
 import json
 import os
 import queue
+import requests
+import schedule
+import shutil
 import socket
 import sys
 import threading
 import time
-from datetime import datetime, timezone, timedelta
-import schedule
-import requests
 
 sendqueue = queue.Queue()
+
+running_last_period = {}
+
+emoji_ok = ':white_check_mark:'
+emoji_bad = ':red_circle:'
 
 class APIHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -56,10 +62,17 @@ def scheduled_monitoring():
     loop = asyncio.get_event_loop()
     loop.run_until_complete(monitoring(False))
 
-running_last_period = {}
+def monitoring(show_all):
+    tp = threading.Thread(target=dockerps, args=(show_all,))
+    td = threading.Thread(target=df, args=(show_all,))
+    tp.start()
+    td.start()
+    tp.join()
+    td.join()
 
-async def monitoring(show_all):
-    global sendqueue
+def dockerps(show_all):
+    global sendqueue, running_last_period
+
     env = ['CADVISOR', 'CONTAINERS']
     if check_environ(env, 'warning'):
         sendqueue.put({'message': 'error: One or some environment variables are not set. Must be set {0}'.format(' '.join(env)) })
@@ -81,7 +94,8 @@ async def monitoring(show_all):
     if show_all:
         text = ''
         for k, v in watch_container.items():
-            text += '{0}: {1}\n'.format(k, v)
+            flag = emoji_ok if v else emoji_bad
+            text += '{0} {1}\n'.format(flag, k)
         sendqueue.put({ 'message': '{0}'.format(text) })
     else:
         text = ''
@@ -91,7 +105,23 @@ async def monitoring(show_all):
                 text += '{0} '.format(k)
                 count += 1
         if count > 0:
-            sendqueue.put({ 'message': '{0} が停止しています'.format(text) })
+            sendqueue.put({ 'message': '{0} {1} が停止しています'.format(emoji_bad, text) })
+
+def df(show_all):
+    global sendqueue, running_last_period
+    stat = shutil.disk_usage("/")
+    show = False
+    message = emoji_ok
+    if (stat.used / stat.total > 0.9 and running_last_period.get('df') is None):
+        show = True
+        message = '{0} ストレージに十分な空き領域がありません\n'.format(emoji_bad)
+    if show_all or show:
+        sendqueue.put({ 'message': '''{0} total: {1}GiB, used: {2}GiB, free: {3}GiB, {4}%'''.format(message,
+                    int(stat.total / 1024 / 1024 / 1024),
+                    int(stat.used / 1024 / 1024 / 1024),
+                    int(stat.free / 1024 / 1024 / 1024),
+                    int(stat.used / stat.total * 100))})
+        running_last_period['df'] = True
 
 def scheduler(loop):
     asyncio.set_event_loop(loop)
@@ -208,12 +238,17 @@ class DiscordClient(discord.Client):
 
     async def on_ready(self):
         print('logged in as {0.user}'.format(self))
-        self.channel = [channel for channel in self.get_all_channels() if channel.name == self.channelname][0]
+        cand = [channel for channel in self.get_all_channels() if channel.name == self.channelname]
+        if len(cand) == 0:
+            raise Exception("channel {0} not found".format(self.channelname))
+        self.channel = cand[0]
         await self.channel.send('hello this is k2/discordbot')
 
     async def on_message(self, message):
         try:
             if message.author == self.user:
+                return
+            if message.channel.name != self.channelname:
                 return
             if message.content.startswith('hi'):
                 await message.channel.send('hi')
@@ -226,7 +261,7 @@ class DiscordClient(discord.Client):
                 else:
                     weather(' '.join(a[1:]))
             if 'ps' in message.content:
-                await monitoring(True)
+                monitoring(True)
         except Exception as e:
             err = e.with_traceback(sys.exc_info()[2])
             err = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
