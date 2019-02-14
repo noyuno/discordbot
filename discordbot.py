@@ -186,8 +186,10 @@ def forecast(loc = None):
     count = 0
     for item in r['hourly']['data']:
         count += 1
-        if count >= 20 or count % 2 == 1:
+        if count >= 20:
             break
+        if count % 2 == 1:
+            continue
         hourly += '{0}: {1}, {2}度, {3}%\n'.format(
             unixtimestrt(item['time']),
             item['summary'],
