@@ -326,17 +326,17 @@ class DiscordClient(discord.Client):
                     else:
                         await self.channel.send(q.get('message'), file=fileinstance)
 
-                    print('sent message data {0} to channel {1}'.format(' '.join(q.keys()), self.channel.name))
+                    print('sent message data ({0}) to channel {1}'.format(', '.join(q.keys()), self.channel.name))
             except Exception as e:
                 err = e.with_traceback(sys.exc_info()[2])
                 errtext = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
-                print(errtext)
+                print(errtext, file=sys.stderr)
                 try:
                     await self.channel.send(errtext)
                 except Exception as e:
                     err = e.with_traceback(sys.exc_info()[2])
                     errtext = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
-                    print(errtext)
+                    print(errtext, file=sys.stderr)
 
 
 def check_environ(keys, header):
