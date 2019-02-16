@@ -52,6 +52,26 @@ def httpserver(loop):
     server = HTTPServer(('discordbot', 80), APIHandler)
     server.serve_forever()
 
+def scheduler(loop):
+    asyncio.set_event_loop(loop)
+    print('launch scheduler')
+    schedule.every().day.at('22:30').do(good_morning) # 07:30
+    schedule.every().day.at('09:20').do( # 18:20
+        (lambda: sendqueue.put({ 'message': '夕ごはんの時間です' })))
+    schedule.every(5).minutes.do(scheduled_monitoring)
+
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
+
+def unixtimestr(ut):
+    return datetime.fromtimestamp(
+        ut, timezone(timedelta(hours=+9), 'JST')).strftime('%m/%d %H:%M')
+
+def unixtimestrt(ut):
+    return datetime.fromtimestamp(
+        ut, timezone(timedelta(hours=+9), 'JST')).strftime('%H:%M')
+
 def good_morning():
     sendqueue.put({ 'message': 'おはようございます'})
     #loop = asyncio.get_event_loop()
@@ -126,26 +146,6 @@ def df(show_all):
                     int(stat.free / 1024 / 1024 / 1024),
                     int(stat.used / stat.total * 100))})
         running_last_period['df'] = True
-
-def scheduler(loop):
-    asyncio.set_event_loop(loop)
-    print('launch scheduler')
-    schedule.every().day.at('22:30').do(good_morning) # 07:30
-    schedule.every().day.at('09:20').do( # 18:20
-        (lambda: sendqueue.put({ 'message': '夕ごはんの時間です' })))
-    schedule.every().hour.do(scheduled_monitoring)
-
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
-
-def unixtimestr(ut):
-    return datetime.fromtimestamp(
-        ut, timezone(timedelta(hours=+9), 'JST')).strftime('%m/%d %H:%M')
-
-def unixtimestrt(ut):
-    return datetime.fromtimestamp(
-        ut, timezone(timedelta(hours=+9), 'JST')).strftime('%H:%M')
 
 def weather(loc = None):
     tf = threading.Thread(target=forecast, args=(loc,))
