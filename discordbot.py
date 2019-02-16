@@ -67,45 +67,49 @@ def monitoring(show_all):
     td = threading.Thread(target=df, args=(show_all,))
     tp.start()
     td.start()
-    tp.join()
-    td.join()
 
 def dockerps(show_all):
     global sendqueue, running_last_period
 
-    env = ['CADVISOR', 'CONTAINERS']
-    if check_environ(env, 'warning'):
-        sendqueue.put({'message': 'error: One or some environment variables are not set. Must be set {0}'.format(' '.join(env)) })
-        return
+    try:
+        env = ['CADVISOR', 'CONTAINERS']
+        if check_environ(env, 'warning'):
+            sendqueue.put({'message': 'error: One or some environment variables are not set. Must be set {0}'.format(' '.join(env)) })
+            return
 
-    watch_container = {}
-    for c in os.environ.get('CONTAINERS').split(','):
-        watch_container[c] = False
-        if running_last_period.get(c) is None:
-            running_last_period[c] = True
-    url = 'http://{0}/api/v1.3/containers/docker'.format(os.environ.get('CADVISOR'))
-    r = requests.get(url).json()
-    #debug
-    #print(r['name'])
-    for container in r['subcontainers']:
-        c = requests.get('http://{0}/api/v1.3/containers{1}'.format(
-            os.environ.get('CADVISOR'), container['name'])).json()
-        watch_container[c['spec']['labels']['com.docker.compose.service']] = True
-    if show_all:
-        text = ''
-        for k, v in watch_container.items():
-            flag = emoji_ok if v else emoji_bad
-            text += '{0} {1}\n'.format(flag, k)
-        sendqueue.put({ 'message': '{0}'.format(text) })
-    else:
-        text = ''
-        count = 0
-        for k, v in watch_container.items():
-            if v == False and running_last_period.get(k) == True:
-                text += '{0} '.format(k)
-                count += 1
-        if count > 0:
-            sendqueue.put({ 'message': '{0} {1} が停止しています'.format(emoji_bad, text) })
+        watch_container = {}
+        for c in os.environ.get('CONTAINERS').split(','):
+            watch_container[c] = False
+            if running_last_period.get(c) is None:
+                running_last_period[c] = True
+        url = 'http://{0}/api/v1.3/containers/docker'.format(os.environ.get('CADVISOR'))
+        r = requests.get(url).json()
+        #debug
+        #print(r['name'])
+        for container in r['subcontainers']:
+            c = requests.get('http://{0}/api/v1.3/containers{1}'.format(
+                os.environ.get('CADVISOR'), container['name'])).json()
+            watch_container[c['spec']['labels']['com.docker.compose.service']] = True
+        if show_all:
+            text = ''
+            for k, v in watch_container.items():
+                flag = emoji_ok if v else emoji_bad
+                text += '{0} {1}\n'.format(flag, k)
+            sendqueue.put({ 'message': '{0}'.format(text) })
+        else:
+            text = ''
+            count = 0
+            for k, v in watch_container.items():
+                if v == False and running_last_period.get(k) == True:
+                    text += '{0} '.format(k)
+                    count += 1
+            if count > 0:
+                sendqueue.put({ 'message': '{0} {1} が停止しています'.format(emoji_bad, text) })
+    except Exception as e:
+        err = e.with_traceback(sys.exc_info()[2])
+        err = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
+        print(err, file=sys.stderr)
+        sendqueue.put({'message': err})
 
 def df(show_all):
     global sendqueue, running_last_period
@@ -148,87 +152,95 @@ def weather(loc = None):
     tx = threading.Thread(target=xrain)
     tf.start()
     tx.start()
-    tf.join()
-    tx.join()
 
 def forecast(loc = None):
     global sendqueue
-    env = ['GOOGLE_MAPS_API_KEY', 'DARK_SKY_API_KEY']
-    if check_environ(env, 'warning'):
-        sendqueue.put({'message': 'error: One or some environment variables are not set. Must be set {0}'.format(' '.join(env)) })
-        return
+    try:
+        env = ['GOOGLE_MAPS_API_KEY', 'DARK_SKY_API_KEY']
+        if check_environ(env, 'warning'):
+            sendqueue.put({'message': 'error: One or some environment variables are not set. Must be set {0}'.format(' '.join(env)) })
+            return
 
-    if loc is None:
-        loc = os.environ.get('LOCATION')
-    if loc == "":
-        loc = 'Tokyo'
-    url = 'https://maps.googleapis.com/maps/api/geocode/json?address={0}&key={1}'.format(
-            loc, os.environ.get('GOOGLE_MAPS_API_KEY'))
-    # debug
-    print(url)
-    r = requests.get(url).json()
-    if r['status'] != "OK" or len(r['results']) == 0:
-        # error
-        sendqueue.put({'message': r['status']})
-        return
+        if loc is None:
+            loc = os.environ.get('LOCATION')
+        if loc == "":
+            loc = 'Tokyo'
+        url = 'https://maps.googleapis.com/maps/api/geocode/json?address={0}&key={1}'.format(
+                loc, os.environ.get('GOOGLE_MAPS_API_KEY'))
+        # debug
+        print(url)
+        r = requests.get(url).json()
+        if r['status'] != "OK" or len(r['results']) == 0:
+            # error
+            sendqueue.put({'message': r['status']})
+            return
 
-    lat = r['results'][0]['geometry']['location']['lat']
-    lng = r['results'][0]['geometry']['location']['lng']
-    # debug
-    #sendqueue.put({'message': 'lat: {0}, lng: {1}'.format(lat, lng)})
+        lat = r['results'][0]['geometry']['location']['lat']
+        lng = r['results'][0]['geometry']['location']['lng']
+        # debug
+        #sendqueue.put({'message': 'lat: {0}, lng: {1}'.format(lat, lng)})
 
-    url = 'https://api.darksky.net/forecast/{0}/{1},{2}?lang=ja&units=si'.format(
-        os.environ.get('DARK_SKY_API_KEY'), str(lat), str(lng))
-    #debug
-    print(url)
-    r = requests.get(url).json()
-    hourly = ''
-    count = 0
-    for item in r['hourly']['data']:
-        count += 1
-        if count >= 20:
-            break
-        if count % 2 == 1:
-            continue
-        hourly += '{0}: {1}, {2}度, {3}%\n'.format(
-            unixtimestrt(item['time']),
-            item['summary'],
-            int(item['temperature']),
-            int(item['precipProbability'] * 100))
-    sendqueue.put({'message': '''{0}時点の{1}の天気: {2}, {3}度, 湿度{4}%, 風速{5}m/s
+        url = 'https://api.darksky.net/forecast/{0}/{1},{2}?lang=ja&units=si'.format(
+            os.environ.get('DARK_SKY_API_KEY'), str(lat), str(lng))
+        #debug
+        print(url)
+        r = requests.get(url).json()
+        hourly = ''
+        count = 0
+        for item in r['hourly']['data']:
+            count += 1
+            if count >= 20:
+                break
+            if count % 2 == 1:
+                continue
+            hourly += '{0}: {1}, {2}度, {3}%\n'.format(
+                unixtimestrt(item['time']),
+                item['summary'],
+                int(item['temperature']),
+                int(item['precipProbability'] * 100))
+        sendqueue.put({'message': '''{0}時点の{1}の天気: {2}, {3}度, 湿度{4}%, 風速{5}m/s
 予報: {6}
 {7}'''.format(
-        unixtimestr(r['currently']['time']),
-        loc,
-        r['currently']['summary'],
-        int(r['currently']['temperature']),
-        int(r['currently']['humidity']*100),
-        int(r['currently']['windSpeed']),
-        r['hourly']['summary'],
-        hourly
-    )})
+            unixtimestr(r['currently']['time']),
+            loc,
+            r['currently']['summary'],
+            int(r['currently']['temperature']),
+            int(r['currently']['humidity']*100),
+            int(r['currently']['windSpeed']),
+            r['hourly']['summary'],
+            hourly
+        )})
+    except Exception as e:
+        err = e.with_traceback(sys.exc_info()[2])
+        err = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
+        print(err, file=sys.stderr)
+        sendqueue.put({'message': err})
 
 def xrain():
     global sendqueue
-    env = ['XRAIN_LON', 'XRAIN_LAT', 'XRAIN_ZOOM', 'MANET']
-    if check_environ(env, 'warning'):
-        sendqueue.put({'message': 'error: One or some environment variables are not set. Must be set {0}'.format(' '.join(env)) })
-        return
-    # & -> %26
-    url = 'http://{0}/?url=http://www.river.go.jp/x/krd0107010.php?lon={1}%26lat={2}%26opa=0.4%26zoom={3}%26leg=0%26ext=0&width=1000&height=850'.format(
-        os.environ.get('MANET'), os.environ.get('XRAIN_LON'),
-        os.environ.get('XRAIN_LAT'), os.environ.get('XRAIN_ZOOM'))
-    # debug
-    print(url)
-    r = requests.get(url)
-    if 'image' not in r.headers['content-type']:
-        pass
-        # error
-        sendqueue.put({'message': 'could not get screenshot' })
-        return
-    #with open('/tmp/image.png', 'wb') as f:
-    #    f.write(r.content)
-    sendqueue.put({ 'imagefile': r.content })
+    try:
+        env = ['XRAIN_LON', 'XRAIN_LAT', 'XRAIN_ZOOM', 'MANET']
+        if check_environ(env, 'warning'):
+            sendqueue.put({'message': 'error: One or some environment variables are not set. Must be set {0}'.format(' '.join(env)) })
+            return
+        # & -> %26
+        url = 'http://{0}/?url=http://www.river.go.jp/x/krd0107010.php?lon={1}%26lat={2}%26opa=0.4%26zoom={3}%26leg=0%26ext=0&width=1000&height=850'.format(
+            os.environ.get('MANET'), os.environ.get('XRAIN_LON'),
+            os.environ.get('XRAIN_LAT'), os.environ.get('XRAIN_ZOOM'))
+        # debug
+        print(url)
+        r = requests.get(url)
+        if 'image' not in r.headers['content-type']:
+            pass
+            # error
+            sendqueue.put({'message': 'could not get screenshot' })
+            return
+        sendqueue.put({ 'imagefile': r.content })
+    except Exception as e:
+        err = e.with_traceback(sys.exc_info()[2])
+        err = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
+        print(err, file=sys.stderr)
+        sendqueue.put({'message': err})
 
 class DiscordClient(discord.Client):
     def __init__(self, channelname, sendqueue, *args, **kwargs):
