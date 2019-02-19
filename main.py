@@ -24,7 +24,7 @@ class Scheduler():
         print('launch scheduler')
         schedule.every().day.at('22:30').do(self.good_morning) # 07:30
         schedule.every().day.at('09:20').do( # 18:20
-            (lambda: sendqueue.put({ 'message': '夕ごはんの時間です' })))
+            (lambda: self.sendqueue.put({ 'message': '夕ごはんの時間です' })))
         schedule.every(5).minutes.do(self.monitoring.run, show_all=False)
 
         while True:
@@ -32,7 +32,7 @@ class Scheduler():
             time.sleep(1)
 
     def good_morning(self):
-        sendqueue.put({ 'message': 'おはようございます'})
+        self.sendqueue.put({ 'message': 'おはようございます'})
         self.weather.run()
 
 def main():
