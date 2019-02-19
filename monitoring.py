@@ -42,6 +42,7 @@ class Monitoring():
                 for k, v in watch_container.items():
                     flag = util.emoji('ok') if v else util.emoji('bad')
                     text += '{0} {1}\n'.format(flag, k)
+                    self.running_last_period[k] = v
                 self.sendqueue.put({ 'message': '{0}'.format(text) })
             else:
                 text = ''
@@ -50,6 +51,7 @@ class Monitoring():
                     if v == False and self.running_last_period.get(k) == True:
                         text += '{0} '.format(k)
                         count += 1
+                    self.running_last_period[k] = v
                 if count > 0:
                     self.sendqueue.put({ 'message': '{0} {1} が停止しています'.format(util.emoji('bad'), text) })
         except Exception as e:
