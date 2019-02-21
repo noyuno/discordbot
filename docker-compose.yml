@@ -9,8 +9,9 @@ services:
             - cadvisor
             - manet
         volumes:
-            - ./data/discordbot:/data/discordbot/out
-            - ./discordbot:/opt
+            - ./data/discordbot:/data/discordbot
+            - ./logs/discordbot:/logs/discordbot
+            - ./discordbot:/opt/discordbot
         environment:
             DEPLOY: /data/discordbot
             DISCORD_TOKEN: ${DISCORD_TOKEN}
