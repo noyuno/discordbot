@@ -1,9 +1,9 @@
 # discordbot
 
-how to use
+# How to use API
 
 ~~~
-curl -XPOST -d '{"message":"e"}' addr
+curl -XPOST -d '{"message":"hello, discordbot"}' http://discordbot/
 ~~~
 
 # Environment variables example
