@@ -6,8 +6,9 @@ import sys
 import util
 
 class Weather():
-    def __init__(self, sendqueue):
+    def __init__(self, sendqueue, logger):
         self.sendqueue = sendqueue
+        self.logger = logger
 
     def run(self, loc = None):
         tf = threading.Thread(target=self.forecast, args=(loc,))
@@ -29,7 +30,7 @@ class Weather():
             url = 'https://maps.googleapis.com/maps/api/geocode/json?address={0}&key={1}'.format(
                     loc, os.environ.get('GOOGLE_MAPS_API_KEY'))
             # debug
-            print(url)
+            self.logger.debug(url)
             r = requests.get(url).json()
             if r['status'] != "OK" or len(r['results']) == 0:
                 # error
@@ -44,7 +45,7 @@ class Weather():
             url = 'https://api.darksky.net/forecast/{0}/{1},{2}?lang=ja&units=si'.format(
                 os.environ.get('DARK_SKY_API_KEY'), str(lat), str(lng))
             #debug
-            print(url)
+            self.logger.debug(url)
             r = requests.get(url).json()
             hourly = ''
             count = 0
@@ -74,7 +75,7 @@ class Weather():
         except Exception as e:
             err = e.with_traceback(sys.exc_info()[2])
             err = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
-            print(err, file=sys.stderr)
+            self.logger.error(err)
             self.sendqueue.put({'message': err})
 
     def xrain(self):
@@ -88,7 +89,7 @@ class Weather():
                 os.environ.get('MANET'), os.environ.get('XRAIN_LON'),
                 os.environ.get('XRAIN_LAT'), os.environ.get('XRAIN_ZOOM'))
             # debug
-            print(url)
+            self.logger.debug(url)
             r = requests.get(url)
             if 'image' not in r.headers['content-type']:
                 pass
@@ -99,6 +100,6 @@ class Weather():
         except Exception as e:
             err = e.with_traceback(sys.exc_info()[2])
             err = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
-            print(err, file=sys.stderr)
+            self.logger.error(err)
             self.sendqueue.put({'message': err})
 

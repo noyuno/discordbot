@@ -3,7 +3,7 @@ import discord
 import sys
 
 class DiscordClient(discord.Client):
-    def __init__(self, channelname, sendqueue, weather, monitoring, *args, **kwargs):
+    def __init__(self, channelname, sendqueue, weather, monitoring, logger, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.bg_task = self.loop.create_task(self.send_task())
         self.channelname = channelname
@@ -11,9 +11,10 @@ class DiscordClient(discord.Client):
         self.sendqueue = sendqueue
         self.weather = weather
         self.monitoring = monitoring
+        self.logger = logger
 
     async def on_ready(self):
-        print('logged in as {0.user}'.format(self))
+        self.logger.debug('logged in as {0.user}'.format(self))
         cand = [channel for channel in self.get_all_channels() if channel.name == self.channelname]
         if len(cand) == 0:
             raise Exception("channel {0} not found".format(self.channelname))
@@ -41,7 +42,7 @@ class DiscordClient(discord.Client):
         except Exception as e:
             err = e.with_traceback(sys.exc_info()[2])
             err = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
-            print(err)
+            self.logger.error(err)
             self.sendqueue.put({'message': err})
 
 
@@ -88,15 +89,15 @@ class DiscordClient(discord.Client):
                     else:
                         await self.channel.send(q.get('message'), file=fileinstance)
 
-                    print('sent message data ({0}) to channel {1}'.format(', '.join(q.keys()), self.channel.name))
+                    self.logger.debug('sent message data ({0}) to channel {1}'.format(', '.join(q.keys()), self.channel.name))
             except Exception as e:
                 err = e.with_traceback(sys.exc_info()[2])
                 errtext = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
-                print(errtext, file=sys.stderr)
+                self.logger.error(errtext)
                 try:
                     await self.channel.send(errtext)
                 except Exception as e:
                     err = e.with_traceback(sys.exc_info()[2])
                     errtext = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
-                    print(errtext, file=sys.stderr)
+                    self.logger.error(errtext)
 

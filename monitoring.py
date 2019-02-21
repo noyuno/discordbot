@@ -7,9 +7,10 @@ import threading
 import util
 
 class Monitoring():
-    def __init__(self, sendqueue):
+    def __init__(self, sendqueue, logger):
         self.sendqueue = sendqueue
         self.running_last_period = {}
+        self.logger = logger
 
     def run(self, show_all):
         tp = threading.Thread(target=self.dockerps, args=(show_all,))
@@ -32,7 +33,7 @@ class Monitoring():
             url = 'http://{0}/api/v1.3/containers/docker'.format(os.environ.get('CADVISOR'))
             r = requests.get(url).json()
             #debug
-            #print(r['name'])
+            #self.logger.debug(r['name'])
             for container in r['subcontainers']:
                 c = requests.get('http://{0}/api/v1.3/containers{1}'.format(
                     os.environ.get('CADVISOR'), container['name'])).json()
@@ -57,7 +58,7 @@ class Monitoring():
         except Exception as e:
             err = e.with_traceback(sys.exc_info()[2])
             err = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
-            print(err, file=sys.stderr)
+            self.logger.error(err)
             self.sendqueue.put({'message': err})
 
     def df(self, show_all):

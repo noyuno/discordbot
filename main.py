@@ -4,8 +4,9 @@ import os
 import sys
 import queue
 import schedule
-import socket
 import time
+import logging
+from datetime import datetime
 
 import util
 import discordbot
@@ -13,15 +14,34 @@ import api
 import weather
 import monitoring
 
+logdir = '/logs/discordbot'
+os.makedirs(logdir, exist_ok=True)
+starttime = datetime.now().strftime('%Y%m%d-%H%M')
+logging.getLogger().setLevel(logging.WARNING)
+logger = logging.getLogger('discordbot')
+logger.setLevel(logging.DEBUG)
+logFormatter = logging.Formatter(fmt='%(asctime)s %(levelname)s: %(message)s',
+                                 datefmt='%Y%m%d-%H%S')
+fileHandler = logging.FileHandler('/{}/{}'.format(logdir, starttime))
+fileHandler.setFormatter(logFormatter)
+logger.addHandler(fileHandler)
+consoleHandler = logging.StreamHandler()
+consoleHandler.setFormatter(logFormatter)
+logger.addHandler(consoleHandler)
+
+logger.info('started discordbot at {0}'.format(starttime))
+
 class Scheduler():
-    def __init__(self, sendqueue, weather, monitoring):
+    def __init__(self, sendqueue, weather, monitoring, logger, loop):
         self.sendqueue = sendqueue
         self.weather = weather
         self.monitoring = monitoring
+        self.logger = logger
+        self.loop = loop
 
-    def run(self, loop):
-        asyncio.set_event_loop(loop)
-        print('launch scheduler')
+    def run(self):
+        asyncio.set_event_loop(self.loop)
+        self.logger.debug('launch scheduler')
         schedule.every().day.at('22:30').do(self.good_morning) # 07:30
         schedule.every().day.at('09:20').do( # 18:20
             (lambda: self.sendqueue.put({ 'message': '夕ごはんの時間です' })))
@@ -43,23 +63,23 @@ def main():
     f = util.environ(envse, 'error')
     util.environ(envsc, 'warning')
     if f:
-        print('error: some environment variables are not set. exiting.', file=sys.stderr)
+        logger.error('error: some environment variables are not set. exiting.')
         sys.exit(1)
 
     sendqueue = queue.Queue()
 
-    print('listen at {0}'.format(socket.gethostbyname_ex(socket.gethostname())))
     httploop = asyncio.new_event_loop()
-    threading.Thread(target=api.run, args=(httploop,sendqueue)).start()
+    ap = api.API(httploop, sendqueue, logger)
+    threading.Thread(target=ap.run, name='api').start()
 
-    wea = weather.Weather(sendqueue)
-    mon = monitoring.Monitoring(sendqueue)
-    sched = Scheduler(sendqueue, wea, mon)
+    wea = weather.Weather(sendqueue, logger)
+    mon = monitoring.Monitoring(sendqueue, logger)
     scheduleloop = asyncio.new_event_loop()
-    threading.Thread(target=sched.run, args=(scheduleloop,)).start()
+    sched = Scheduler(sendqueue, wea, mon, logger, scheduleloop)
+    threading.Thread(target=sched.run, name='scheduler').start()
 
-    print('launch discord client')
-    client = discordbot.DiscordClient(os.environ.get('DISCORD_CHANNEL_NAME'), sendqueue, wea, mon)
+    logger.debug('launch discord client')
+    client = discordbot.DiscordClient(os.environ.get('DISCORD_CHANNEL_NAME'), sendqueue, wea, mon, logger)
     client.run(os.environ.get('DISCORD_TOKEN'))
 
 if __name__ == '__main__':
