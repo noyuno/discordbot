@@ -19,7 +19,7 @@ os.makedirs(logdir, exist_ok=True)
 starttime = datetime.now().strftime('%Y%m%d-%H%M')
 logging.getLogger().setLevel(logging.WARNING)
 logger = logging.getLogger('discordbot')
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 logFormatter = logging.Formatter(fmt='%(asctime)s %(levelname)s: %(message)s',
                                  datefmt='%Y%m%d-%H%S')
 fileHandler = logging.FileHandler('/{}/{}'.format(logdir, starttime))
