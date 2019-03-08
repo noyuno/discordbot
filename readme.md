@@ -1,12 +1,25 @@
 # discordbot
 
-# How to use API
+## How to use API
 
-~~~
-curl -XPOST -d '{"message":"hello, discordbot"}' http://discordbot/
+~~~bash
+curl -XPOST -d '{"message":"hello, discordbot"}' http://discordbot/ >/dev/null
 ~~~
 
-# Environment variables example
+helper function
+~~~bash
+message () {
+    echo "$1"
+    curl -XPOST -sd '{"message": "'"$CONTAINER_NAME"': '"$1"'"}' http://discordbot >/dev/null
+    if [ $? -ne 0 ]; then
+        echo "$CONTAINER_NAME: failed to send message to discordbot"
+    fi
+}
+
+message "operation finished"
+~~~
+
+## Environment variables example
 
 put below variables to `.env`
 
@@ -21,23 +34,23 @@ XRAIN_LAT=
 XRAIN_ZOOM=8
 ~~~
 
-# Commands
+## Commands
 
-## weather|天気
+### weather|天気
 
 show weather forecast and XRAIN map
 
 ![weather](https://raw.githubusercontent.com/noyuno/discordbot/master/weather.png)
 
-## ps
+### ps
 
 show status of docker containers
 
-## help
+### help
 
 show available commands
 
-## hi
+### hi
 
 just return 'hi'
 
