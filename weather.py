@@ -9,41 +9,50 @@ class Weather():
     def __init__(self, sendqueue, logger):
         self.sendqueue = sendqueue
         self.logger = logger
+        self.loc = None
+        self.lat = None
+        self.lng = None
+        (self.loc, self.lat, self.lng) = self.location()
 
-    def run(self, loc = None):
-        tf = threading.Thread(target=self.forecast, args=(loc,))
-        tx = threading.Thread(target=self.xrain)
+    def run(self, loc=None):
+        if loc is not None:
+            (lat, lng) = self.location(loc)
+        else:
+            (loc, lat, lng) = (self.loc, self.lat, self.lng)
+        tf = threading.Thread(target=self.forecast, args=(loc, lat, lng))
+        tx = threading.Thread(target=self.xrain, args=(loc, lat, lng))
         tf.start()
         tx.start()
 
-    def forecast(self, loc = None):
+    def location(self, loc=None):
+        if loc is None:
+            loc = os.environ.get('LOCATION')
+        if loc == "":
+            loc = 'Tokyo'
+        url = 'https://maps.googleapis.com/maps/api/geocode/json?address={0}&key={1}'.format(
+                loc, os.environ.get('GOOGLE_MAPS_API_KEY'))
+        # debug
+        self.logger.debug(url)
+        r = requests.get(url).json()
+        if r['status'] != "OK" or len(r['results']) == 0:
+            # error
+            self.sendqueue.put({'message': r['status']})
+            return
+
+        lat = r['results'][0]['geometry']['location']['lat']
+        lng = r['results'][0]['geometry']['location']['lng']
+        # debug
+        #self.sendqueue.put({'message': 'lat: {0}, lng: {1}'.format(lat, lng)})
+        return (loc, lat, lng)
+
+    def forecast(self, loc, lat, lng):
         try:
             env = ['GOOGLE_MAPS_API_KEY', 'DARK_SKY_API_KEY']
             if util.environ(env, 'warning'):
                 self.sendqueue.put({'message': 'error: One or some environment variables are not set. Must be set {0}'.format(' '.join(env)) })
                 return
-
-            if loc is None:
-                loc = os.environ.get('LOCATION')
-            if loc == "":
-                loc = 'Tokyo'
-            url = 'https://maps.googleapis.com/maps/api/geocode/json?address={0}&key={1}'.format(
-                    loc, os.environ.get('GOOGLE_MAPS_API_KEY'))
-            # debug
-            self.logger.debug(url)
-            r = requests.get(url).json()
-            if r['status'] != "OK" or len(r['results']) == 0:
-                # error
-                self.sendqueue.put({'message': r['status']})
-                return
-
-            lat = r['results'][0]['geometry']['location']['lat']
-            lng = r['results'][0]['geometry']['location']['lng']
-            # debug
-            #self.sendqueue.put({'message': 'lat: {0}, lng: {1}'.format(lat, lng)})
-
             url = 'https://api.darksky.net/forecast/{0}/{1},{2}?lang=ja&units=si'.format(
-                os.environ.get('DARK_SKY_API_KEY'), str(lat), str(lng))
+                os.environ.get('DARK_SKY_API_KEY'), str(self.lat), str(self.lng))
             #debug
             self.logger.debug(url)
             r = requests.get(url).json()
@@ -78,16 +87,15 @@ class Weather():
             self.logger.error(err)
             self.sendqueue.put({'message': err})
 
-    def xrain(self):
+    def xrain(self, loc, lat, lng):
         try:
-            env = ['XRAIN_LON', 'XRAIN_LAT', 'XRAIN_ZOOM', 'MANET']
+            env = ['XRAIN_ZOOM', 'MANET']
             if util.environ(env, 'warning'):
                 self.sendqueue.put({'message': 'error: One or some environment variables are not set. Must be set {0}'.format(' '.join(env)) })
                 return
             # & -> %26
             url = 'http://{0}/?url=http://www.river.go.jp/x/krd0107010.php?lon={1}%26lat={2}%26opa=0.4%26zoom={3}%26leg=0%26ext=0&width=1000&height=850'.format(
-                os.environ.get('MANET'), os.environ.get('XRAIN_LON'),
-                os.environ.get('XRAIN_LAT'), os.environ.get('XRAIN_ZOOM'))
+                os.environ.get('MANET'), lng, lat, os.environ.get('XRAIN_ZOOM'))
             # debug
             self.logger.debug(url)
             r = requests.get(url)

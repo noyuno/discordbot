@@ -57,7 +57,7 @@ class Scheduler():
 
 def main():
     envse = ['DISCORD_TOKEN', 'DISCORD_CHANNEL_NAME']
-    envsc = ['LOCATION', 'XRAIN_LON', 'XRAIN_LAT', 'XRAIN_ZOOM', 'MANET',
+    envsc = ['LOCATION', 'XRAIN_ZOOM', 'MANET',
              'GOOGLE_MAPS_API_KEY', 'DARK_SKY_API_KEY', 'CADVISOR', 'CONTAINERS']
 
     f = util.environ(envse, 'error')
