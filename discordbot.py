@@ -1,6 +1,7 @@
 import asyncio
 import discord
 import sys
+import textwrap
 
 class DiscordClient(discord.Client):
     def __init__(self, channelname, sendqueue, weather, monitoring, logger, *args, **kwargs):
@@ -45,6 +46,41 @@ class DiscordClient(discord.Client):
             self.logger.error(err)
             self.sendqueue.put({'message': err})
 
+    async def send_message(self, message):
+        await self.channel.send(message)
+
+    async def send_message_embed(self, message, q):
+        e = discord.Embed()
+        anyembed = False
+        fileinstance = None
+        if q.get('title') is not None:
+            e.title = q.get('title')
+            anyembed = True
+        if q.get('description') is not None:
+            e.description = q.get('description')
+            anyembed = True
+        if q.get('url') is not None:
+            e.url = q.get('url')
+            anyembed = True
+        if q.get('color') is not None:
+            e.color = q.get('color')
+            anyembed = True
+        if q.get('image') is not None:
+            e.set_image(url=q.get('image'))
+            anyembed = True
+        if q.get('thumbnail') is not None:
+            e.set_image(url=q.get('thumbnail'))
+            anyembed = True
+        if q.get('video') is not None:
+            e.set_image(url=q.get('video'))
+            anyembed = True
+        if q.get('imagefile') is not None:
+            fileinstance = discord.File(q.get('imagefile'), 'image.png')
+        if anyembed:
+            await self.channel.send(message, embed=e, file=fileinstance)
+        else:
+            await self.channel.send(message, file=fileinstance)
+
 
     async def send_task(self):
         await self.wait_until_ready()
@@ -58,37 +94,13 @@ class DiscordClient(discord.Client):
                 await asyncio.sleep(1)
                 if not self.sendqueue.empty():
                     q = self.sendqueue.get()
-                    e = discord.Embed()
-                    anyembed = False
-                    fileinstance = None
-                    if q.get('title') is not None:
-                        e.title = q.get('title')
-                        anyembed = True
-                    if q.get('description') is not None:
-                        e.description = q.get('description')
-                        anyembed = True
-                    if q.get('url') is not None:
-                        e.url = q.get('url')
-                        anyembed = True
-                    if q.get('color') is not None:
-                        e.color = q.get('color')
-                        anyembed = True
-                    if q.get('image') is not None:
-                        e.set_image(url=q.get('image'))
-                        anyembed = True
-                    if q.get('thumbnail') is not None:
-                        e.set_image(url=q.get('thumbnail'))
-                        anyembed = True
-                    if q.get('video') is not None:
-                        e.set_image(url=q.get('video'))
-                        anyembed = True
-                    if q.get('imagefile') is not None:
-                        fileinstance = discord.File(q.get('imagefile'), 'image.png')
-                    if anyembed:
-                        await self.channel.send(q.get('message'), embed=e, file=fileinstance)
-                    else:
-                        await self.channel.send(q.get('message'), file=fileinstance)
-
+                    messages = textwrap.wrap(q.get('message'), width=2000, replace_whitespace=False)
+                    line = 0
+                    while line < len(messages):
+                        if line == 0:
+                            await self.send_message(messages[line])
+                        else:
+                            await self.send_message_embed(messages[line], q)
                     self.logger.debug('sent message data ({0}) to channel {1}'.format(', '.join(q.keys()), self.channel.name))
             except Exception as e:
                 err = e.with_traceback(sys.exc_info()[2])
