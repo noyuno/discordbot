@@ -41,10 +41,9 @@ class DiscordClient(discord.Client):
             if 'ps' in message.content:
                 self.monitoring.run(True)
         except Exception as e:
-            err = e.with_traceback(sys.exc_info()[2])
-            err = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
-            self.logger.error(err)
-            self.sendqueue.put({'message': err})
+            msg = 'on_message()'
+            self.logger.exception(msg, stack_info=True)
+            self.sendqueue.put({'message': 'error {}: {}({})'.format(msg, e.__class__.__name__, str(e)) })
 
     async def send_message(self, message):
         await self.channel.send(message)
@@ -94,23 +93,24 @@ class DiscordClient(discord.Client):
                 await asyncio.sleep(1)
                 if not self.sendqueue.empty():
                     q = self.sendqueue.get()
-                    messages = textwrap.wrap(q.get('message'), width=2000, replace_whitespace=False)
-                    line = 0
-                    while line < len(messages):
-                        if line == 0:
-                            await self.send_message_embed(messages[line], q)
-                        else:
-                            await self.send_message(messages[line])
-                        line += 1
+                    if q.get('message') is not None:
+                        messages = textwrap.wrap(q.get('message'), width=2000, replace_whitespace=False)
+                        line = 0
+                        while line < len(messages):
+                            if line == 0:
+                                await self.send_message_embed(messages[line], q)
+                            else:
+                                await self.send_message(messages[line])
+                            line += 1
+                    else:
+                        await self.send_message_embed(None, q)
                     self.logger.debug('sent message data ({0}) to channel {1}'.format(', '.join(q.keys()), self.channel.name))
             except Exception as e:
-                err = e.with_traceback(sys.exc_info()[2])
-                errtext = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
-                self.logger.error(errtext)
+                msg = 'send_task()'
+                self.logger.exception(msg, stack_info=True)
                 try:
-                    await self.channel.send(errtext)
+                    await self.channel.send('error {}: {}({})'.format(msg, e.__class__.__name__, str(e)))
                 except Exception as e:
-                    err = e.with_traceback(sys.exc_info()[2])
-                    errtext = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
-                    self.logger.error(errtext)
+                    msg = 'except in send_task()'
+                    self.logger.exception(msg, stack_info=True)
 

@@ -35,9 +35,7 @@ class Weather():
         self.logger.debug(url)
         r = requests.get(url).json()
         if r['status'] != "OK" or len(r['results']) == 0:
-            # error
-            self.sendqueue.put({'message': r['status']})
-            return
+            raise RuntimeError('Weather.location(): Google API returned {}'.format(r['status']))
 
         lat = r['results'][0]['geometry']['location']['lat']
         lng = r['results'][0]['geometry']['location']['lng']
