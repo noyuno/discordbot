@@ -80,10 +80,9 @@ class Weather():
                 hourly
             )})
         except Exception as e:
-            err = e.with_traceback(sys.exc_info()[2])
-            err = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
-            self.logger.error(err)
-            self.sendqueue.put({'message': err})
+            msg = 'forecast()'
+            self.logger.exception(msg, stack_info=True)
+            self.sendqueue.put({'message': 'error {}: {}({})'.format(msg, e.__class__.__name__, str(e)) })
 
     def xrain(self, loc, lat, lng):
         try:
@@ -104,8 +103,7 @@ class Weather():
                 return
             self.sendqueue.put({ 'imagefile': r.content })
         except Exception as e:
-            err = e.with_traceback(sys.exc_info()[2])
-            err = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
-            self.logger.error(err)
-            self.sendqueue.put({'message': err})
+            msg = 'xrain()'
+            self.logger.exception(msg, stack_info=True)
+            self.sendqueue.put({'message': 'error {}: {}({})'.format(msg, e.__class__.__name__, str(e)) })
 

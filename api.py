@@ -24,9 +24,9 @@ def makeAPIHandler(sendqueue, logger):
                 self.sendqueue.put(got)
                 res = { 'status': 200 }
             except Exception as e:
-                err = e.with_traceback(sys.exc_info()[2])
-                res = { 'status': 500, 'type': err.__class__.__name__, 'message': str(err) }
-                self.logger.error('error: {0}({1}), got: {2}'.format(err.__class__.__name__, str(err), got))
+                res = { 'status': 500 }
+                self.logger.exception('APIHandler.do_POST()', stack_info=True)
+
             self.send_response(res['status'])
             self.send_header('content-type', 'application/json')
             self.end_headers()

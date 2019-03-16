@@ -56,16 +56,15 @@ class Monitoring():
                 if count > 0:
                     self.sendqueue.put({ 'message': '{0} {1} が停止しています'.format(util.emoji('bad'), text) })
         except Exception as e:
-            err = e.with_traceback(sys.exc_info()[2])
-            err = 'error: {0}({1})'.format(err.__class__.__name__, str(err))
-            self.logger.error(err)
-            self.sendqueue.put({'message': err})
-
+            msg = 'dockerps()'
+            self.logger.exception(msg, stack_info=True)
+            self.sendqueue.put({'message': 'error {}: {}({})'.format(msg, e.__class__.__name__, str(e))})
+            
     def df(self, show_all):
         stat = shutil.disk_usage("/")
         show = False
         message = util.emoji('ok')
-        if (stat.used / stat.total > 0.9 and running_last_period.get('df') is None):
+        if (stat.used / stat.total > 0.9 and self.running_last_period.get('df') is None):
             show = True
             message = '{0} ストレージに十分な空き領域がありません\n'.format(util.emoji('bad'))
         if show_all or show:
