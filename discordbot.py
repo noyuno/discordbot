@@ -98,9 +98,10 @@ class DiscordClient(discord.Client):
                     line = 0
                     while line < len(messages):
                         if line == 0:
-                            await self.send_message(messages[line])
-                        else:
                             await self.send_message_embed(messages[line], q)
+                        else:
+                            await self.send_message(messages[line])
+                        line += 1
                     self.logger.debug('sent message data ({0}) to channel {1}'.format(', '.join(q.keys()), self.channel.name))
             except Exception as e:
                 err = e.with_traceback(sys.exc_info()[2])
