@@ -25,6 +25,8 @@ services:
             XRAIN_LAT: ${XRAIN_LAT}
             XRAIN_ZOOM: ${XRAIN_ZOOM}
             CONTAINERS: 'nginx,php7,gitbucket,gitbucket-db,gitbucket-db-backup,minio,wekan,wekan-db,backupd,animed,prometheus,node-exporter,grafana,manet'
+            MORNING: 22:00 # 07:00
+            EVENING: 10:00 # 19:00
 
     cadvisor:
         image: google/cadvisor:latest

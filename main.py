@@ -42,9 +42,11 @@ class Scheduler():
     def run(self):
         asyncio.set_event_loop(self.loop)
         self.logger.debug('launch scheduler')
-        schedule.every().day.at('22:30').do(self.good_morning) # 07:30
-        schedule.every().day.at('09:20').do( # 18:20
-            (lambda: self.sendqueue.put({ 'message': '夕ごはんの時間です' })))
+        if os.environ.get('MORNING') is not None:
+            schedule.every().day.at(os.environ.get('MORNING')).do(self.good_morning)
+        if os.environ.get('EVENING') is not None:
+            schedule.every().day.at(os.environ.get('EVENING')).do(
+                (lambda: self.sendqueue.put({ 'message': '夕ごはんの時間です' })))
         schedule.every(5).minutes.do(self.monitoring.run, show_all=False)
 
         while True:
@@ -58,7 +60,7 @@ class Scheduler():
 def main():
     envse = ['DISCORD_TOKEN', 'DISCORD_CHANNEL_NAME']
     envsc = ['LOCATION', 'XRAIN_ZOOM', 'MANET',
-             'GOOGLE_MAPS_API_KEY', 'DARK_SKY_API_KEY', 'CADVISOR', 'CONTAINERS']
+             'GOOGLE_MAPS_API_KEY', 'DARK_SKY_API_KEY', 'CADVISOR', 'CONTAINERS', 'MORNING', 'EVENING']
 
     f = util.environ(envse, 'error')
     util.environ(envsc, 'warning')
